@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
-import { normalizeToUtcIso } from "@/lib/date";
+import {
+  jakartaEndOfDayUtcIso,
+  jakartaStartOfDayUtcIso,
+  normalizeToUtcIso,
+} from "@/lib/date";
 
 export const TRANSACTION_TYPES = ["expense", "income"] as const;
 export const TRANSACTION_SOURCES = ["manual", "chat", "receipt"] as const;
@@ -122,4 +126,83 @@ export async function createTransaction(
       createdAt,
     },
   };
+}
+
+const dateFilterRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+export const listTransactionsFilterSchema = z.object({
+  from: z
+    .string()
+    .regex(dateFilterRegex, "Format tanggal 'from' harus YYYY-MM-DD")
+    .optional(),
+  to: z
+    .string()
+    .regex(dateFilterRegex, "Format tanggal 'to' harus YYYY-MM-DD")
+    .optional(),
+  categoryId: z.string().trim().min(1).optional(),
+  accountId: z.string().trim().min(1).optional(),
+});
+
+export type ListTransactionsFilter = z.infer<
+  typeof listTransactionsFilterSchema
+>;
+
+export async function listTransactions(
+  db: AppDatabase,
+  userId: string,
+  filter: ListTransactionsFilter = {}
+) {
+  const conditions: SQL[] = [eq(transactions.userId, userId)];
+
+  if (filter.from) {
+    const startUtc = jakartaStartOfDayUtcIso(filter.from);
+    if (startUtc) {
+      conditions.push(gte(transactions.occurredAt, startUtc));
+    }
+  }
+
+  if (filter.to) {
+    const endUtc = jakartaEndOfDayUtcIso(filter.to);
+    if (endUtc) {
+      conditions.push(lte(transactions.occurredAt, endUtc));
+    }
+  }
+
+  if (filter.categoryId) {
+    conditions.push(eq(transactions.categoryId, filter.categoryId));
+  }
+
+  if (filter.accountId) {
+    conditions.push(eq(transactions.accountId, filter.accountId));
+  }
+
+  return db
+    .select({
+      id: transactions.id,
+      amount: transactions.amount,
+      type: transactions.type,
+      occurredAt: transactions.occurredAt,
+      merchant: transactions.merchant,
+      note: transactions.note,
+      categoryId: transactions.categoryId,
+      categoryName: categories.name,
+      accountId: transactions.accountId,
+      accountName: accounts.name,
+      source: transactions.source,
+      createdAt: transactions.createdAt,
+    })
+    .from(transactions)
+    .leftJoin(
+      categories,
+      and(
+        eq(transactions.categoryId, categories.id),
+        eq(categories.userId, userId)
+      )
+    )
+    .leftJoin(
+      accounts,
+      and(eq(transactions.accountId, accounts.id), eq(accounts.userId, userId))
+    )
+    .where(and(...conditions))
+    .orderBy(desc(transactions.occurredAt), desc(transactions.createdAt));
 }

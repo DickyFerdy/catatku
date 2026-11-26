@@ -117,12 +117,20 @@ export function ManualTransactionForm() {
             Masukkan nominal dalam bilangan bulat rupiah (tanpa titik/koma).
           </p>
         </div>
-        <Link
-          href="/"
-          className="rounded-lg border border-zinc-300 px-3.5 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
-          Kembali
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/transactions"
+            className="rounded-lg border border-zinc-300 px-3.5 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Daftar Transaksi
+          </Link>
+          <Link
+            href="/"
+            className="rounded-lg border border-zinc-300 px-3.5 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Kembali
+          </Link>
+        </div>
       </div>
 
       <form

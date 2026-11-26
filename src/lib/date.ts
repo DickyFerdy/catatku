@@ -44,3 +44,29 @@ export function nowJakartaDateTimeInput(date = new Date()): string {
 
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
+
+export function jakartaStartOfDayUtcIso(dateStr: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  const ms = Date.parse(`${dateStr}T00:00:00.000+07:00`);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+export function jakartaEndOfDayUtcIso(dateStr: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  const ms = Date.parse(`${dateStr}T23:59:59.999+07:00`);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+export function formatJakartaDateTime(utcIso: string): string {
+  const date = new Date(utcIso);
+  if (Number.isNaN(date.getTime())) return utcIso;
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: JAKARTA_TIMEZONE,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
