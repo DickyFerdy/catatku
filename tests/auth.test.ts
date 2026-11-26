@@ -30,8 +30,8 @@ describe("auth password & session helpers", () => {
     expect(verified).toEqual({ userId: "user-123" });
 
     const [payload, sig] = token.split(".");
-    const replacement = sig?.endsWith("x") ? "y" : "x";
-    const tampered = `${payload}.${sig?.slice(0, -1)}${replacement}`;
+    const firstChar = sig?.[0] === "A" ? "B" : "A";
+    const tampered = `${payload}.${firstChar}${sig?.slice(1)}`;
     expect(await verifySessionToken(tampered)).toBeNull();
 
     const expired = await createSessionToken("user-123", -10);
