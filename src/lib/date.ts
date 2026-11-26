@@ -70,3 +70,9 @@ export function formatJakartaDateTime(utcIso: string): string {
     hour12: false,
   }).format(date);
 }
+
+export function utcIsoToJakartaDateTimeInput(utcIso: string): string {
+  const date = new Date(utcIso);
+  if (Number.isNaN(date.getTime())) return "";
+  return nowJakartaDateTimeInput(date);
+}

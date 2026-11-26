@@ -40,10 +40,20 @@ export const createTransactionSchema = z.object({
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
 
-export async function createTransaction(
+export const updateTransactionSchema = createTransactionSchema.omit({
+  source: true,
+});
+
+export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
+
+async function validateTransactionRefs(
   db: AppDatabase,
   userId: string,
-  input: CreateTransactionInput
+  input: {
+    occurredAt: string;
+    categoryId?: string | null;
+    accountId?: string | null;
+  }
 ) {
   const occurredAtUtc = normalizeToUtcIso(input.occurredAt);
   if (!occurredAtUtc) {
@@ -90,6 +100,17 @@ export async function createTransaction(
     }
   }
 
+  return { ok: true as const, occurredAtUtc, categoryId, accountId };
+}
+
+export async function createTransaction(
+  db: AppDatabase,
+  userId: string,
+  input: CreateTransactionInput
+) {
+  const refs = await validateTransactionRefs(db, userId, input);
+  if (!refs.ok) return refs;
+
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   const merchant = input.merchant ? input.merchant : null;
@@ -100,11 +121,11 @@ export async function createTransaction(
     userId,
     amount: input.amount,
     type: input.type,
-    occurredAt: occurredAtUtc,
+    occurredAt: refs.occurredAtUtc,
     merchant,
     note,
-    categoryId,
-    accountId,
+    categoryId: refs.categoryId,
+    accountId: refs.accountId,
     source: input.source,
     receiptId: null,
     createdAt,
@@ -117,15 +138,87 @@ export async function createTransaction(
       userId,
       amount: input.amount,
       type: input.type,
-      occurredAt: occurredAtUtc,
+      occurredAt: refs.occurredAtUtc,
       merchant,
       note,
-      categoryId,
-      accountId,
+      categoryId: refs.categoryId,
+      accountId: refs.accountId,
       source: input.source,
       createdAt,
     },
   };
+}
+
+export async function updateTransaction(
+  db: AppDatabase,
+  userId: string,
+  transactionId: string,
+  input: UpdateTransactionInput
+) {
+  const refs = await validateTransactionRefs(db, userId, input);
+  if (!refs.ok) return refs;
+
+  const merchant = input.merchant ? input.merchant : null;
+  const note = input.note ? input.note : null;
+
+  const result = await db
+    .update(transactions)
+    .set({
+      amount: input.amount,
+      type: input.type,
+      occurredAt: refs.occurredAtUtc,
+      merchant,
+      note,
+      categoryId: refs.categoryId,
+      accountId: refs.accountId,
+    })
+    .where(
+      and(eq(transactions.id, transactionId), eq(transactions.userId, userId))
+    );
+
+  if (result.changes === 0) {
+    return {
+      ok: false as const,
+      status: 404 as const,
+      error: "Transaksi tidak ditemukan",
+    };
+  }
+
+  return {
+    ok: true as const,
+    transaction: {
+      id: transactionId,
+      amount: input.amount,
+      type: input.type,
+      occurredAt: refs.occurredAtUtc,
+      merchant,
+      note,
+      categoryId: refs.categoryId,
+      accountId: refs.accountId,
+    },
+  };
+}
+
+export async function deleteTransaction(
+  db: AppDatabase,
+  userId: string,
+  transactionId: string
+) {
+  const result = await db
+    .delete(transactions)
+    .where(
+      and(eq(transactions.id, transactionId), eq(transactions.userId, userId))
+    );
+
+  if (result.changes === 0) {
+    return {
+      ok: false as const,
+      status: 404 as const,
+      error: "Transaksi tidak ditemukan",
+    };
+  }
+
+  return { ok: true as const };
 }
 
 const dateFilterRegex = /^\d{4}-\d{2}-\d{2}$/;

@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { formatJakartaDateTime } from "@/lib/date";
+import {
+  formatJakartaDateTime,
+  utcIsoToJakartaDateTimeInput,
+} from "@/lib/date";
 
 interface OptionItem {
   id: string;
@@ -32,6 +35,16 @@ export function TransactionsList() {
   const [to, setTo] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [accountId, setAccountId] = useState("");
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editType, setEditType] = useState<"expense" | "income">("expense");
+  const [editAmount, setEditAmount] = useState("");
+  const [editOccurredAt, setEditOccurredAt] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [editAccountId, setEditAccountId] = useState("");
+  const [editMerchant, setEditMerchant] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,18 +111,22 @@ export function TransactionsList() {
     };
   }, [fetchTransactions]);
 
+  async function refreshCurrentFilter() {
+    const txList = await fetchTransactions({
+      from,
+      to,
+      categoryId,
+      accountId,
+    });
+    setItems(txList);
+  }
+
   async function handleFilterSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const txList = await fetchTransactions({
-        from,
-        to,
-        categoryId,
-        accountId,
-      });
-      setItems(txList);
+      await refreshCurrentFilter();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memuat data.");
     } finally {
@@ -136,6 +153,78 @@ export function TransactionsList() {
       setError(err instanceof Error ? err.message : "Gagal memuat data.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function startEdit(tx: TransactionItem) {
+    setError(null);
+    setEditingId(tx.id);
+    setEditType(tx.type);
+    setEditAmount(String(tx.amount));
+    setEditOccurredAt(utcIsoToJakartaDateTimeInput(tx.occurredAt));
+    setEditCategoryId(tx.categoryId ?? "");
+    setEditAccountId(tx.accountId ?? "");
+    setEditMerchant(tx.merchant ?? "");
+    setEditNote(tx.note ?? "");
+  }
+
+  async function handleSaveEdit(id: string) {
+    setError(null);
+    if (!/^\d+$/.test(editAmount.trim())) {
+      setError("Nominal harus berupa bilangan bulat rupiah tanpa desimal.");
+      return;
+    }
+    const amount = Number.parseInt(editAmount.trim(), 10);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      setError("Nominal harus lebih dari 0.");
+      return;
+    }
+
+    setSavingId(id);
+    try {
+      const res = await fetch(`/api/transactions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editType,
+          amount,
+          occurredAt: editOccurredAt,
+          categoryId: editCategoryId || null,
+          accountId: editAccountId || null,
+          merchant: editMerchant.trim() || null,
+          note: editNote.trim() || null,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Gagal mengubah transaksi.");
+        return;
+      }
+      setEditingId(null);
+      await refreshCurrentFilter();
+    } catch {
+      setError("Gagal terhubung ke server.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Hapus transaksi ini?")) return;
+    setError(null);
+    setSavingId(id);
+    try {
+      const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Gagal menghapus transaksi.");
+        return;
+      }
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    } catch {
+      setError("Gagal terhubung ke server.");
+    } finally {
+      setSavingId(null);
     }
   }
 
@@ -262,41 +351,148 @@ export function TransactionsList() {
         <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {items.map((tx) => (
-              <li
-                key={tx.id}
-                className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
-              >
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                      {tx.merchant || tx.note || "Transaksi"}
-                    </span>
-                    {tx.categoryName ? (
-                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                        {tx.categoryName}
-                      </span>
-                    ) : null}
-                    {tx.accountName ? (
-                      <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                        {tx.accountName}
-                      </span>
-                    ) : null}
+              <li key={tx.id} className="px-5 py-4">
+                {editingId === tx.id ? (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <select
+                        value={editType}
+                        onChange={(e) =>
+                          setEditType(e.target.value as "expense" | "income")
+                        }
+                        className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      >
+                        <option value="expense">Pengeluaran</option>
+                        <option value="income">Pemasukan</option>
+                      </select>
+                      <input
+                        type="number"
+                        step={1}
+                        min={1}
+                        value={editAmount}
+                        onChange={(e) => setEditAmount(e.target.value)}
+                        placeholder="Nominal (Rp)"
+                        className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      />
+                      <input
+                        type="datetime-local"
+                        value={editOccurredAt}
+                        onChange={(e) => setEditOccurredAt(e.target.value)}
+                        className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <select
+                        value={editCategoryId}
+                        onChange={(e) => setEditCategoryId(e.target.value)}
+                        className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      >
+                        <option value="">-- Kategori --</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={editAccountId}
+                        onChange={(e) => setEditAccountId(e.target.value)}
+                        className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      >
+                        <option value="">-- Sumber Dana --</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={editMerchant}
+                        onChange={(e) => setEditMerchant(e.target.value)}
+                        placeholder="Toko"
+                        className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      />
+                      <input
+                        type="text"
+                        value={editNote}
+                        onChange={(e) => setEditNote(e.target.value)}
+                        placeholder="Catatan"
+                        className="rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                        className="rounded-lg border border-zinc-300 px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingId === tx.id}
+                        onClick={() => void handleSaveEdit(tx.id)}
+                        className="rounded-lg bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        Simpan
+                      </button>
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    {formatJakartaDateTime(tx.occurredAt)} WIB
-                    {tx.merchant && tx.note ? ` · ${tx.note}` : ""}
-                  </p>
-                </div>
-                <span
-                  className={`text-base font-semibold ${
-                    tx.type === "income"
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-zinc-900 dark:text-zinc-50"
-                  }`}
-                >
-                  {tx.type === "income" ? "+" : "-"}Rp
-                  {tx.amount.toLocaleString("id-ID")}
-                </span>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                          {tx.merchant || tx.note || "Transaksi"}
+                        </span>
+                        {tx.categoryName ? (
+                          <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                            {tx.categoryName}
+                          </span>
+                        ) : null}
+                        {tx.accountName ? (
+                          <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            {tx.accountName}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        {formatJakartaDateTime(tx.occurredAt)} WIB
+                        {tx.merchant && tx.note ? ` · ${tx.note}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span
+                        className={`text-base font-semibold ${
+                          tx.type === "income"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-zinc-900 dark:text-zinc-50"
+                        }`}
+                      >
+                        {tx.type === "income" ? "+" : "-"}Rp
+                        {tx.amount.toLocaleString("id-ID")}
+                      </span>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(tx)}
+                          className="text-zinc-600 hover:underline dark:text-zinc-300"
+                        >
+                          Ubah
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingId === tx.id}
+                          onClick={() => void handleDelete(tx.id)}
+                          className="text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
