@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoutButton } from "@/components/LogoutButton";
 
 export default function Home() {
   return (
@@ -40,12 +41,15 @@ export default function Home() {
           <span className="text-zinc-500 dark:text-zinc-400">
             Status sistem tersedia melalui endpoint kesehatan.
           </span>
-          <Link
-            href="/api/health"
-            className="rounded-lg border border-zinc-300 px-3.5 py-1.5 font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            Cek /api/health
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/api/health"
+              className="rounded-lg border border-zinc-300 px-3.5 py-1.5 font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Cek /api/health
+            </Link>
+            <LogoutButton />
+          </div>
         </div>
       </div>
     </main>
