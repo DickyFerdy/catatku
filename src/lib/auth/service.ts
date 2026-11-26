@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { users } from "@/db/schema";
+import { seedDefaultAccountsAndCategories } from "@/lib/queries/accounts-categories";
 import { hashPassword, verifyPassword } from "./password";
 import type { AuthInput } from "./schemas";
 
@@ -38,6 +39,8 @@ export async function registerUser(
     passwordHash,
     createdAt,
   });
+
+  await seedDefaultAccountsAndCategories(db, id);
 
   return { ok: true, user: { id, email: input.email } };
 }

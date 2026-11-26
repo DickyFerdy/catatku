@@ -41,7 +41,13 @@ export default function Home() {
           <span className="text-zinc-500 dark:text-zinc-400">
             Status sistem tersedia melalui endpoint kesehatan.
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/settings"
+              className="rounded-lg border border-zinc-300 px-3.5 py-1.5 font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Sumber Dana &amp; Kategori
+            </Link>
             <Link
               href="/api/health"
               className="rounded-lg border border-zinc-300 px-3.5 py-1.5 font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
